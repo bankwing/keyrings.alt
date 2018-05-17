@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import getpass
+import paramiko
 
 from six.moves import configparser
 
@@ -67,10 +68,21 @@ class Encrypted(object):
                 continue
             return password
 
+    def _get_password_from_rsa(self):
+        keyfile = os.path.expanduser('~/.ssh/id_rsa')
+        if not os.path.exists(keyfile):
+            sys.stderr.write("Error: No such file or directory: '"+keyfile+"'\nPlease generate one or provide the password.\n")
+            exit(1)
+        key = paramiko.RSAKey.from_private_key_file(keyfile)
+        if '' == key:  # pragma: no cover
+            sys.stderr.write("Error: blank passwords aren't allowed.\n")
+            exit(1)
+        masterKey = key.get_base64()
+        return masterKey
+
 
 class EncryptedKeyring(Encrypted, Keyring):
     """PyCrypto File Keyring"""
-
     filename = 'crypted_pass.cfg'
     pw_prefix = 'pw:'.encode()
 
@@ -102,7 +114,8 @@ class EncryptedKeyring(Encrypted, Keyring):
         """
         Initialize a new password file and set the reference password.
         """
-        self.keyring_key = self._get_new_password()
+        self.keyring_key = self._get_password_from_rsa()
+        #print(self.keyring_key)
         # set a reference password, used to check that the password provided
         #  matches for subsequent checks.
         self.set_password('keyring-setting',
@@ -182,8 +195,10 @@ class EncryptedKeyring(Encrypted, Keyring):
         Unlock this keyring by getting the password for the keyring from the
         user.
         """
-        self.keyring_key = getpass.getpass(
-            'Please enter password for encrypted keyring: ')
+        self.keyring_key = self._get_password_from_rsa()
+        #print(self.keyring_key)
+        #self.keyring_key = getpass.getpass(
+        #    'Please enter password for encrypted keyring: ')
         try:
             ref_pw = self.get_password('keyring-setting', 'password reference')
             assert ref_pw == 'password reference value'
@@ -229,3 +244,4 @@ class EncryptedKeyring(Encrypted, Keyring):
         """
         Convert older keyrings to the current format.
         """
+
